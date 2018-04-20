@@ -109,8 +109,10 @@ int main(int argc, char** argv)
 	        perror("sender: sendto");
 	        exit(1);
 	    }
+			//TODO: This will need to be modulo total sequence numbers
 	    mynum++;
 			packets_sent++;
+			//TODO: Wait until necessary ACKS received before continuing to send/sliding window. If not, reduce my_num and packets_sent to resend earlier information.
 	  }
     //need to keep track of all old transmissions until the ACK has been received
     //now needs some mechanism to receive ACKs

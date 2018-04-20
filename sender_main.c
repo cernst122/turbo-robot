@@ -11,9 +11,10 @@
 #include <arpa/inet.h>
 
 uint16_t mynum = 0;
+int headersize = 2; //ALSO CHANGE IN RECEIVER
 
-#define packet_size = 1472; //1472 B packets
-#define BWDELAY = 1359; //100*1000000 * .02 / packet_size = 1359  //100Mbps * 20ms / packet_size
+#define packet_size 1472 //1472 B packets
+#define BWDELAY 1359 //100*1000000 * .02 / packet_size = 1359  //100Mbps * 20ms / packet_size
 //BWD should dynamically adjust based on RTT, maybe? or will RTT stay fairly constant?
 //timeout will be 2 * RTT ish
 
@@ -82,30 +83,35 @@ int main(int argc, char** argv)
     }
 
     char c;
-    char buf[numbytes];
+    char megabuf[numbytes];
     int count = 0;
     //reserve a few bytes of header at the beginning for packet number.
     //Size of header should be enough to represent the total sequence numbers.
     //Start with window up to 65535? 16 bits = 2 bytes
     int headersize = 2;
     while(((c = fgetc(file)) !=EOF) && count < numbytes){
-    	buf[count + headersize] = c;
+    	megabuf[count + headersize] = c;
     	count++;
     }
 		//This should all be copied at the beginning, and as we send more packets, just send buf starting at packet num * 1472.
 		//But then how do we attach headers?
 
 		//Attach two-byte header info with my packet number
-    //mynum is 16 bits.
-    buf[0] = (mynum & 0xFF00) >> 8;
-    buf[1] = (char)(mynum & 0x00FF);
-		//change the third parameter to be packet_size.
-    if ((numbytes = sendto(sockfd, buf, numbytes + 2, 0,
-             p->ai_addr, p->ai_addrlen)) == -1) {
-        perror("sender: sendto");
-        exit(1);
-    }
-    mynum++;
+		int packets_sent = 0;
+    while(packets_sent*(packet_size - headersize) < numbytes){
+			char buf[packet_size];
+	    //mynum is 16 bits.
+	    buf[0] = (mynum & 0xFF00) >> 8;
+	    buf[1] = (char)(mynum & 0x00FF);
+			memcpy(buf+headersize, megabuf+packets_sent*packet_size, packet_size);
+	    if ((numbytes = sendto(sockfd, buf, packet_size, 0,
+	             p->ai_addr, p->ai_addrlen)) == -1) {
+	        perror("sender: sendto");
+	        exit(1);
+	    }
+	    mynum++;
+			packets_sent++;
+	  }
     //need to keep track of all old transmissions until the ACK has been received
     //now needs some mechanism to receive ACKs
 

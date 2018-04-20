@@ -17,7 +17,7 @@
 
 
 int timeout_in_ms = 200; //???? what's an appropriate value?
-int headersize = 2;
+int headersize = 2; //ALSO CHANGE IN SENDER
 #define MAXBUFLEN 1472
 
 // get sockaddr, IPv4 or IPv6:

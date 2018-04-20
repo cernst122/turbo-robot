@@ -10,6 +10,7 @@
 
 #include <arpa/inet.h>
 
+uint16_t mynum = 0;
 
 void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
 	//the sockfd has been set up with hostname and hostUDPport
@@ -70,19 +71,33 @@ int main(int argc, char** argv)
     char * filepath = argv[3];
     FILE * file;
     file = fopen(filepath, "r");
+    if (!file){
+    	perror("file not found");
+    	exit(1);
+    }
+    	 
     char c;
     char buf[numbytes];
     int count = 0;
-    while(c = fgetc(file) !=EOF && count < numbytes){
-    	buf[count] = c;
+    //reserve a few bytes of header at the beginning for packet number.
+    //Size of header should be enough to represent the total sequence numbers.
+    //Start with window up to 65535? 16 bits = 2 bytes
+    int headersize = 2;
+    while(((c = fgetc(file)) !=EOF) && count < numbytes){
+    	buf[count + headersize] = c;
     	count++;
     }
-    if ((numbytes = sendto(sockfd, buf, numbytes, 0,
+    //mynum is 16 bits.
+    buf[0] = (mynum & 0xFF00) >> 8;
+    buf[1] = (char)(mynum & 0x00FF);
+    if ((numbytes = sendto(sockfd, buf, numbytes + 2, 0,
              p->ai_addr, p->ai_addrlen)) == -1) {
         perror("talker: sendto");
         exit(1);
     }
-
+    mynum++;
+    //need to keep track of all old transmissions until the ACK has been received
+    //now needs some mechanism to receive ACKs
     freeaddrinfo(servinfo);
 
     printf("talker: sent %d bytes to %s\n", (int)numbytes, argv[1]);

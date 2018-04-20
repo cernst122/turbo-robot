@@ -16,10 +16,8 @@
 #include <stdint.h>
 
 
-
-#define BACKLOG 10     // how many pending connections queue will hold
-#define MAXDATASIZE 200
-#define MAXBUFLEN 100
+int headersize = 2;
+#define MAXBUFLEN 1472
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -34,16 +32,16 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int argc, char *argv[])
 {
-	
+
 	if(argc != 3)
 	{
 		fprintf(stderr, "usage: %s UDP_port filename_to_write\n\n", argv[0]);
 		exit(1);
 	}
-	
+
 	unsigned short intudpPort = (unsigned short int)atoi(argv[1]);
 	char * filepath = argv[2];
-	
+
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -101,8 +99,14 @@ int main(int argc, char *argv[])
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s));
     printf("listener: packet is %d bytes long\n", numbytes);
-    buf[numbytes] = '\0';
+    buf[numbytes + headersize] = '\0'; //*headersize
     printf("listener: packet contains \"%s\"\n", buf);
+   // &buf += (char)2; //point after the mynum header
+    FILE * file;
+    file = fopen(filepath, "w");
+    fwrite(buf + headersize, 1, numbytes - headersize, file); //*headersize
+
+    //now send an ACK. In the future, the received packets will be buffered and sorted before getting written.
 
     close(sockfd);
 

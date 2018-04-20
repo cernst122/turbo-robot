@@ -98,7 +98,7 @@ int main(int argc, char** argv)
 
 		//Attach two-byte header info with my packet number
 		int packets_sent = 0;
-		int total_packets = int(numbytes / (packet_size - headersize)) + 1;
+		int total_packets = (int)(numbytes / (packet_size - headersize)) + 1;
     while(packets_sent < total_packets){
 			char buf[packet_size];
 	    //mynum is 16 bits.
@@ -107,7 +107,7 @@ int main(int argc, char** argv)
 			memcpy(buf+headersize, megabuf+packets_sent*(packet_size-headersize), packet_size-headersize);
 			//if last packet, only send a a certain number of bytes
 			if(packets_sent = total_packets -1){
-				int bytes_to_send = numbytes % (packet_size = headersize);
+				int bytes_to_send = numbytes % (packet_size - headersize);
 				if ((numbytes = sendto(sockfd, buf, bytes_to_send, 0,
 								p->ai_addr, p->ai_addrlen)) == -1) {
 					 perror("sender: sendto");

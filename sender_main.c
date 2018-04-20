@@ -12,6 +12,11 @@
 
 uint16_t mynum = 0;
 
+#define packet_size = 1472; //1472 B packets
+#define BWDELAY = 1359; //100*1000000 * .02 / packet_size = 1359  //100Mbps * 20ms / packet_size
+//BWD should dynamically adjust based on RTT, maybe? or will RTT stay fairly constant?
+//timeout will be 2 * RTT ish
+
 void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
 	//the sockfd has been set up with hostname and hostUDPport
 	/*
@@ -33,7 +38,7 @@ int main(int argc, char** argv)
          struct addrinfo hints, *servinfo, *p;
          int rv;
         // int numbytes;
-	
+
 	if(argc != 5)
 	{
 		fprintf(stderr, "usage: %s receiver_hostname receiver_port filename_to_xfer bytes_to_xfer\n\n", argv[0]);
@@ -41,7 +46,7 @@ int main(int argc, char** argv)
 	}
 	udpPort = (unsigned short int)atoi(argv[2]);
 	numbytes = atoll(argv[4]);
-	
+
 	 memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
@@ -55,7 +60,7 @@ int main(int argc, char** argv)
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            perror("talker: socket");
+            perror("sender: socket");
             continue;
         }
 
@@ -63,7 +68,7 @@ int main(int argc, char** argv)
     }
 
     if (p == NULL) {
-        fprintf(stderr, "talker: failed to create socket\n");
+        fprintf(stderr, "sender: failed to create socket\n");
         return 2;
     }
 
@@ -75,7 +80,7 @@ int main(int argc, char** argv)
     	perror("file not found");
     	exit(1);
     }
-    	 
+
     char c;
     char buf[numbytes];
     int count = 0;
@@ -87,20 +92,29 @@ int main(int argc, char** argv)
     	buf[count + headersize] = c;
     	count++;
     }
+		//This should all be copied at the beginning, and as we send more packets, just send buf starting at packet num * 1472.
+		//But then how do we attach headers?
+
+		//Attach two-byte header info with my packet number
     //mynum is 16 bits.
     buf[0] = (mynum & 0xFF00) >> 8;
     buf[1] = (char)(mynum & 0x00FF);
+		//change the third parameter to be packet_size.
     if ((numbytes = sendto(sockfd, buf, numbytes + 2, 0,
              p->ai_addr, p->ai_addrlen)) == -1) {
-        perror("talker: sendto");
+        perror("sender: sendto");
         exit(1);
     }
     mynum++;
     //need to keep track of all old transmissions until the ACK has been received
     //now needs some mechanism to receive ACKs
+
+		//record time when ACK is received to estimate RTT
+
+
     freeaddrinfo(servinfo);
 
-    printf("talker: sent %d bytes to %s\n", (int)numbytes, argv[1]);
+    printf("sender: sent %d bytes to %s\n", (int)numbytes, argv[1]);
     close(sockfd);
 
     return 0;

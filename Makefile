@@ -6,5 +6,6 @@ reliable_sender:
 reliable_receiver:
 	gcc -pthread -o reliable_receiver receiver_main.c -g
 
+.PHONY: clean
 clean:
-	rm reliable_sender reliable_receiver
+	@rm -f reliable_sender reliable_receiver *.o

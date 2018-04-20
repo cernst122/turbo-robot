@@ -16,6 +16,7 @@
 #include <stdint.h>
 
 
+int timeout_in_ms = 200; //???? what's an appropriate value?
 int headersize = 2;
 #define MAXBUFLEN 1472
 
@@ -65,13 +66,13 @@ int main(int argc, char *argv[])
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            perror("listener: socket");
+            perror("receiver: socket");
             continue;
         }
 
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("listener: bind");
+            perror("receiver: bind");
             continue;
         }
 
@@ -79,13 +80,27 @@ int main(int argc, char *argv[])
     }
 
     if (p == NULL) {
-        fprintf(stderr, "listener: failed to bind socket\n");
+        fprintf(stderr, "receiver: failed to bind socket\n");
         return 2;
     }
 
     freeaddrinfo(servinfo);
 
-    printf("listener: waiting to recvfrom...\n");
+    printf("receiver: waiting to recvfrom...\n");
+
+    FILE * file;
+    //this should probably be "a" instead of "w" since we're writing in bursts
+    file = fopen(filepath, "a");
+
+//this probably all needs to go in a while loop so it can keep receiving...?
+
+//timeout stuff
+struct timeval tv;
+tv.tv_sec = 0;
+tv.tv_usec = timeout_in_ms * 1000;
+if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+    //timeout handling....
+}
 
     addr_len = sizeof their_addr;
     if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
@@ -94,19 +109,25 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+      //now send an ACK. In the future, the received packets will be buffered and sorted before getting written.
+      //Use selective acknowledgment and ack all frames received
+
+   //these 3 printfs are purely for debugging
     printf("listener: got packet from %s\n",
         inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s));
     printf("listener: packet is %d bytes long\n", numbytes);
     buf[numbytes + headersize] = '\0'; //*headersize
-    printf("listener: packet contains \"%s\"\n", buf);
-   // &buf += (char)2; //point after the mynum header
-    FILE * file;
-    file = fopen(filepath, "w");
-    fwrite(buf + headersize, 1, numbytes - headersize, file); //*headersize
+    //this line doesn't really work anymore with the headers
+    //once all packets have been received and put in order,
 
-    //now send an ACK. In the future, the received packets will be buffered and sorted before getting written.
+    //TODO: write starting at a bufindex we keep track of. DO NOT calculate with packet # * packet size, since packet # will wrap around!
+    //TODO: change third parameter if header process changes
+    fwrite(buf + headersize, 1, numbytes - headersize, file); //*headersize
+    //bufindex += packet_size;
+
+
 
     close(sockfd);
 

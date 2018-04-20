@@ -98,17 +98,33 @@ int main(int argc, char** argv)
 
 		//Attach two-byte header info with my packet number
 		int packets_sent = 0;
-    while(packets_sent*(packet_size - headersize) < numbytes){
+		int total_packets = int(numbytes / (packet_size - headersize)) + 1;
+    while(packets_sent < total_packets){
 			char buf[packet_size];
 	    //mynum is 16 bits.
 	    buf[0] = (mynum & 0xFF00) >> 8;
 	    buf[1] = (char)(mynum & 0x00FF);
-			memcpy(buf+headersize, megabuf+packets_sent*packet_size, packet_size);
-	    if ((numbytes = sendto(sockfd, buf, packet_size, 0,
-	             p->ai_addr, p->ai_addrlen)) == -1) {
-	        perror("sender: sendto");
-	        exit(1);
-	    }
+			memcpy(buf+headersize, megabuf+packets_sent*(packet_size-headersize), packet_size-headersize);
+			//if last packet, only send a a certain number of bytes
+			if(packets_sent = total_packets -1){
+				int bytes_to_send = numbytes % (packet_size = headersize);
+				if ((numbytes = sendto(sockfd, buf, bytes_to_send, 0,
+								p->ai_addr, p->ai_addrlen)) == -1) {
+					 perror("sender: sendto");
+					 exit(1);
+			 }
+			}
+
+			//if not last packet, send normal packet size
+			else{
+		    if ((numbytes = sendto(sockfd, buf, packet_size, 0,
+		             p->ai_addr, p->ai_addrlen)) == -1) {
+		        perror("sender: sendto");
+		        exit(1);
+		    }
+			}
+
+
 			//TODO: This will need to be modulo total sequence numbers
 	    mynum++;
 			packets_sent++;

@@ -150,7 +150,7 @@ if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
 #include <netdb.h>
 
 
-
+#define headersize 2
 #define MAXBUFLEN 100
 
 
@@ -223,6 +223,14 @@ int main(int argc, char *argv[])
 
     printf("listener: waiting to recvfrom...\n");
 
+
+        FILE * file;
+        //this should probably be "a" instead of "w" since we're writing in bursts
+        file = fopen(filepath, "a");
+
+
+
+
     addr_len = sizeof their_addr;
     if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
         (struct sockaddr *)&their_addr, &addr_len)) == -1) {
@@ -237,6 +245,10 @@ int main(int argc, char *argv[])
     printf("listener: packet is %d bytes long\n", numbytes);
     buf[numbytes] = '\0';
     printf("listener: packet contains \"%s\"\n", buf);
+
+    //TODO: write starting at a bufindex we keep track of. DO NOT calculate with packet # * packet size, since packet # will wrap around!
+    //TODO: change third parameter if header process changes
+    fwrite(buf + headersize, 1, numbytes - headersize, file); //*headersize
 
     close(sockfd);
 

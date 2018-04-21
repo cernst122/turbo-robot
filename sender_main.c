@@ -90,7 +90,7 @@ int main(int argc, char** argv)
     //Start with window up to 65535? 16 bits = 2 bytes
     int headersize = 2;
     while(((c = fgetc(file)) !=EOF) && count < numbytes){
-    	megabuf[count + headersize] = c;
+    	megabuf[count] = c;
     	count++;
     }
 		//This should all be copied at the beginning, and as we send more packets, just send buf starting at packet num * 1472.

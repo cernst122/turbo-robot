@@ -106,9 +106,9 @@ int main(int argc, char** argv)
 	    buf[1] = (char)(mynum & 0x00FF);
 			memcpy(buf+headersize, megabuf+packets_sent*(packet_size-headersize), packet_size-headersize);
 			//if last packet, only send a a certain number of bytes
-			if(packets_sent = total_packets -1){
+			if(packets_sent == (total_packets -1)){
 				int bytes_to_send = numbytes % (packet_size - headersize);
-				if ((numbytes = sendto(sockfd, buf, bytes_to_send, 0,
+				if ((numbytes = sendto(sockfd, buf, bytes_to_send + headersize, 0,
 								p->ai_addr, p->ai_addrlen)) == -1) {
 					 perror("sender: sendto");
 					 exit(1);

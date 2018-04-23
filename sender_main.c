@@ -11,13 +11,15 @@
 #include <arpa/inet.h>
 
 uint16_t mynum = 0;
-int headersize = 2; //ALSO CHANGE IN RECEIVER
-
+#define headersize 4 //ALSO CHANGE IN RECEIVER
+//The total expected packets will need to change from 1 to 4 to accomodate packets
 #define packet_size 1472 //1472 B packets
-#define BWDELAY 1359 //100*1000000 * .02 / packet_size = 1359  //100Mbps * 20ms / packet_size
+#define BWDELAY 170 //100*1000000 * .02 / packet_size = 170  //100Mbps * 20ms / packet_size
+#define NUMSEQNUMS BWDELAY * 2
 //BWD should dynamically adjust based on RTT, maybe? or will RTT stay fairly constant?
 //timeout will be 2 * RTT ish
-
+//LATER SWITCH THIS TO BWDELAY
+int SWS = 35;
 void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
 	//the sockfd has been set up with hostname and hostUDPport
 	/*
@@ -35,6 +37,9 @@ int main(int argc, char** argv)
 {
 	unsigned short int udpPort;
 	unsigned long long int numbytes;
+	struct sockaddr_storage their_addr;
+		socklen_t addr_len;
+	  addr_len = sizeof their_addr;
 	 int sockfd;
          struct addrinfo hints, *servinfo, *p;
          int rv;
@@ -88,7 +93,6 @@ int main(int argc, char** argv)
     //reserve a few bytes of header at the beginning for packet number.
     //Size of header should be enough to represent the total sequence numbers.
     //Start with window up to 65535? 16 bits = 2 bytes
-    int headersize = 2;
     while(((c = fgetc(file)) !=EOF) && count < numbytes){
     	megabuf[count] = c;
     	count++;
@@ -98,16 +102,32 @@ int main(int argc, char** argv)
 
 		//Attach two-byte header info with my packet number
 		int packets_sent = 0;
+		int next_packet_frame_start = SWS;
+		int packets_sent_in_window = 0;
 		int total_packets = (int)(numbytes / (packet_size - headersize)) + 1;
+		int packets_tobesent_this_window = 0;
     while(packets_sent < total_packets){
 			char buf[packet_size];
 	    //mynum is 16 bits.
 	    buf[0] = (mynum & 0xFF00) >> 8;
 	    buf[1] = (char)(mynum & 0x00FF);
+	    //tell the receiver how many packets to expect in this window
+	    //(last transmission may be fewer than window size).
+	    if((total_packets - packets_sent) < SWS){
+	      if (total_packets % SWS == 0)
+	      	      packets_tobesent_this_window = SWS;
+	      else
+	        packets_tobesent_this_window = (char)total_packets % SWS;
+	     }
+            else 
+	      packets_tobesent_this_window = (char)(SWS);
+      
+      	    buf[2] = packets_tobesent_this_window;
+      	    buf[3] = (char)total_packets;
 			memcpy(buf+headersize, megabuf+packets_sent*(packet_size-headersize), packet_size-headersize);
 			//if last packet, only send a a certain number of bytes
 			if(packets_sent == (total_packets -1)){
-				int bytes_to_send = numbytes % (packet_size - headersize);
+				int bytes_to_send = atoi(argv[4]) % (packet_size - headersize);
 				if ((numbytes = sendto(sockfd, buf, bytes_to_send + headersize, 0,
 								p->ai_addr, p->ai_addrlen)) == -1) {
 					 perror("sender: sendto");
@@ -124,16 +144,48 @@ int main(int argc, char** argv)
 		    }
 			}
 
+			mynum++;
+			if (mynum >= NUMSEQNUMS)
+				mynum = 0;
 
-			//TODO: This will need to be modulo total sequence numbers
-	    mynum++;
 			packets_sent++;
-			//TODO: Wait until necessary ACKS received before continuing to send/sliding window. If not, reduce my_num and packets_sent to resend earlier information.
-	  }
-    //need to keep track of all old transmissions until the ACK has been received
-    //now needs some mechanism to receive ACKs
+			packets_sent_in_window++;
+			//NOTE: When SWS > RWS, this expression will not work
+			if (packets_sent_in_window >= packets_tobesent_this_window){
+				char ackbuf[2];
+				//3rd param = size of ackbuf
+				if ((numbytes = recvfrom(sockfd, ackbuf, 2 , 0,
+						(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+						perror("recvfrom2");
+						exit(1);
+				}
+				//if ack is at end of window, slide window, reset vars, and keep sending
+				uint16_t acknum;
+				acknum = acknum | ackbuf[1];
+				acknum = acknum | (ackbuf[0] << 8);
+				//if you're done sending everything
+				if((acknum == ((packets_sent - 1) % NUMSEQNUMS)) && (total_packets == packets_sent))
+				  break;
+			   	//TODO: this won't work when RWS < SWS! Find a way to slide if necessary! 
+				if (acknum == next_packet_frame_start - 1){
+					next_packet_frame_start += SWS;
+					packets_sent_in_window = 0;
+					if (next_packet_frame_start >= NUMSEQNUMS)
+					  next_packet_frame_start = next_packet_frame_start % NUMSEQNUMS;
 
-		//record time when ACK is received to estimate RTT
+				}
+				//else retransmit this window
+				else{
+					mynum = mynum - SWS;
+					packets_sent = packets_sent - SWS;
+					packets_sent_in_window = 0;
+				}
+			}
+			//Wait until necessary ACKS received before continuing to send/sliding window. If not, reduce my_num and packets_sent to resend earlier information.
+			//slide window
+			//revert packets sent in window to 0
+	  }
+
 
 
     freeaddrinfo(servinfo);

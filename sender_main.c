@@ -19,7 +19,7 @@ uint16_t mynum = 0;
 //BWD should dynamically adjust based on RTT, maybe? or will RTT stay fairly constant?
 //timeout will be 2 * RTT ish
 //LATER SWITCH THIS TO BWDELAY
-int SWS = 35;
+int SWS = 3;
 void reliablyTransfer(char* hostname, unsigned short int hostUDPport, char* filename, unsigned long long int bytesToTransfer) {
 	//the sockfd has been set up with hostname and hostUDPport
 	/*

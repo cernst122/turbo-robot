@@ -15,7 +15,7 @@
 #define MAXBUFLEN 1472
 #define BWDELAY 170
 #define NUMSEQNUMS (BWDELAY * 2)
-int RWS = 35;
+int RWS = 3;
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
 {
@@ -81,7 +81,6 @@ int main(int argc, char *argv[])
         return 2;
     }
 
-    freeaddrinfo(servinfo);
 
     printf("listener: waiting to recvfrom...\n");
 
@@ -141,23 +140,25 @@ int main(int argc, char *argv[])
       uint16_t packetnum = 0;
       packetnum = packetnum | tempbuf[1];
       packetnum = packetnum | (tempbuf[0] << 8);
+      //make a separate variable, analogous to packetnum, for indexing in window-specific contexts
+      uint16_t index = packetnum % RWS;
       expected_packets_this_window = (char)tempbuf[2];
       total_packets_expected = tempbuf[3];
       if (expected_packets_this_window > RWS)
         expected_packets_this_window = RWS;
       if(numbytes < MAXBUFLEN)
-        lastbufsmaller[packetnum % expected_packets_this_window]  = numbytes - headersize;
+        lastbufsmaller[index]  = numbytes - headersize;
       //should it also be less than next expected frame? that would mess up on wrapping around to 0
       //or if this is a duplicate packet
-      if ((packetnum > last_acceptable_frame) || receivedbuf[packetnum % expected_packets_this_window]) {
+      if ((packetnum > last_acceptable_frame) || receivedbuf[index]) {
         //drop it
       }
 
       else{
         //transfer contents into the permanent buf for this packet
-        memcpy(storagebuf[packetnum % expected_packets_this_window], tempbuf+headersize, numbytes - headersize);
+        memcpy(storagebuf[index], tempbuf+headersize, numbytes - headersize);
         //mark this packet number as present
-        receivedbuf[packetnum % expected_packets_this_window] = 1;
+        receivedbuf[index] = 1;
         total_packets_received++;
       }
       int allpresent = 1;
@@ -182,6 +183,7 @@ int main(int argc, char *argv[])
             fwrite(storagebuf[i], 1, MAXBUFLEN - headersize, file);
         }
         //send an ACK and slide the window
+        /*
         char ackbuf[2];
         ackbuf[0] = (char)(((next_expected_frame + expected_packets_this_window - 1) & 0xFF00) >> 8);
         ackbuf[1] = (char)((next_expected_frame + expected_packets_this_window - 1) & 0x00FF);
@@ -191,7 +193,7 @@ int main(int argc, char *argv[])
              perror("sender: sendto");
              exit(1);
          }
-        
+        */
          //slide the window only if we're not completely done
          if(!done){
 		 next_expected_frame+=RWS;
@@ -206,6 +208,7 @@ int main(int argc, char *argv[])
           }
           //if finished
           else {
+          	  /*
             char ackbuf[2];
         ackbuf[0] = (char)(((next_expected_frame + expected_packets_this_window - 1) & 0xFF00) >> 8);
         ackbuf[1] = (char)((next_expected_frame + expected_packets_this_window - 1) & 0x00FF);
@@ -215,7 +218,7 @@ int main(int argc, char *argv[])
              perror("sender: sendto");
              exit(1);
          }
-        
+        */
             //send final ack
             fclose(file);
             break;
@@ -271,6 +274,7 @@ int main(int argc, char *argv[])
     //fwrite(buf + headersize, 1, numbytes - headersize, file); //*headersize
 
     close(sockfd);
+     freeaddrinfo(servinfo);
 
     return 0;
 }

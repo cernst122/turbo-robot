@@ -104,16 +104,28 @@ int main(int argc, char** argv)
 		int packets_sent = 0;
 		int next_packet_frame_start = SWS;
 		int packets_sent_in_window = 0;
-		int total_packets = (int)(numbytes / (packet_size - headersize)) + 1;
+		int total_packets;
+		if (numbytes % (packet_size - headersize) == 0)
+		  total_packets = (numbytes / (packet_size - headersize));
+		else
+		  total_packets = (int)(numbytes / (packet_size - headersize)) + 1;
+	  
 		int packets_tobesent_this_window = 0;
+		int windows_sent = 0;
+		int total_windows = 0;
+		if (total_packets % SWS == 0)
+		  total_windows = total_packets / SWS;
+		else
+		   total_windows = (int)(total_packets / SWS) + 1;
+	  
     while(packets_sent < total_packets){
 			char buf[packet_size];
 	    //mynum is 16 bits.
 	    buf[0] = (mynum & 0xFF00) >> 8;
 	    buf[1] = (char)(mynum & 0x00FF);
-	    //tell the receiver how many packets to expect in this window
+	    //tell the receiver how many packets to expect in this last window
 	    //(last transmission may be fewer than window size).
-	    if((total_packets - packets_sent) < SWS){
+	    if(windows_sent >= total_windows-1){
 	      if (total_packets % SWS == 0)
 	      	      packets_tobesent_this_window = SWS;
 	      else
@@ -123,11 +135,14 @@ int main(int argc, char** argv)
 	      packets_tobesent_this_window = (char)(SWS);
       
       	    buf[2] = packets_tobesent_this_window;
+      	    //TODO:This will need to be a lot more than 256 (only equals 375KB). Expand to 16bits
       	    buf[3] = (char)total_packets;
 			memcpy(buf+headersize, megabuf+packets_sent*(packet_size-headersize), packet_size-headersize);
 			//if last packet, only send a a certain number of bytes
 			if(packets_sent == (total_packets -1)){
 				int bytes_to_send = atoi(argv[4]) % (packet_size - headersize);
+				if (bytes_to_send == 0)
+				  bytes_to_send = packet_size - headersize;
 				if ((numbytes = sendto(sockfd, buf, bytes_to_send + headersize, 0,
 								p->ai_addr, p->ai_addrlen)) == -1) {
 					 perror("sender: sendto");
@@ -152,12 +167,34 @@ int main(int argc, char** argv)
 			packets_sent_in_window++;
 			//NOTE: When SWS > RWS, this expression will not work
 			if (packets_sent_in_window >= packets_tobesent_this_window){
+				
+				if(total_packets <= packets_sent)
+				  break;
+			   	//TODO: this won't work when RWS < SWS! Find a way to slide if necessary! 
+			   	windows_sent++;
+					next_packet_frame_start += SWS;
+					packets_sent_in_window = 0;
+					if (next_packet_frame_start >= NUMSEQNUMS)
+					  next_packet_frame_start = next_packet_frame_start % NUMSEQNUMS;
+
+				
+				/*
+				struct timeval tv;
+				fd_set infile;
+				tv.tv_sec = 0;
+				tv.tv_usec = 500000;
+				FD_ZERO(&infile);
+				FD_SET(sockfd, &infile);
+				select(sockfd+1, &infile, NULL, NULL, &tv);
+				
 				char ackbuf[2];
 				//3rd param = size of ackbuf
-				if ((numbytes = recvfrom(sockfd, ackbuf, 2 , 0,
-						(struct sockaddr *)&their_addr, &addr_len)) == -1) {
-						perror("recvfrom2");
-						exit(1);
+				if (FD_ISSET(sockfd, &infile)){
+					if ((numbytes = recvfrom(sockfd, ackbuf, 2 , 0,
+							(struct sockaddr *)&their_addr, &addr_len)) == -1) {
+							perror("recvfrom2");
+							exit(1);
+					}
 				}
 				//if ack is at end of window, slide window, reset vars, and keep sending
 				uint16_t acknum;
@@ -180,6 +217,7 @@ int main(int argc, char** argv)
 					packets_sent = packets_sent - SWS;
 					packets_sent_in_window = 0;
 				}
+				*/
 			}
 			//Wait until necessary ACKS received before continuing to send/sliding window. If not, reduce my_num and packets_sent to resend earlier information.
 			//slide window
@@ -195,3 +233,4 @@ int main(int argc, char** argv)
 
     return 0;
 }
+

@@ -95,13 +95,15 @@ int main(int argc, char *argv[])
 
     addr_len = sizeof their_addr;
 
+
     uint16_t next_expected_frame = 0;
     uint16_t last_acceptable_frame = (next_expected_frame + RWS - 1) % NUMSEQNUMS;
-    struct timeval lastheard;
+    struct timeval lastheardtime;
     struct timeval timeout; //2 * RTT = 2 * 20ms
     //20ms = 20,000 microseconds
     timeout.tv_usec = 20000;
-    timeout.tv_sec = 0;
+    timeout.tv_sec = 1; //for testing purposes, set a high timeout
+    //we're seeing differences of 50ish in seconds....
     int i;
     int done = 0;
      char storagebuf[RWS][MAXBUFLEN];
@@ -134,7 +136,7 @@ int main(int argc, char *argv[])
           perror("recvfrom1");
           exit(1);
       }
-      gettimeofday(&lastheard, NULL);
+      gettimeofday(&lastheardtime, NULL);
       //parse received packet's sequence numbers
       uint16_t packetnum = 0;
       packetnum = packetnum | tempbuf[1];
@@ -145,7 +147,7 @@ int main(int argc, char *argv[])
         expected_packets_this_window = RWS;
       if(numbytes < MAXBUFLEN)
         lastbufsmaller[packetnum % expected_packets_this_window]  = numbytes - headersize;
-      //should it also be less than next expected frame? this would mess up on wrapping around to 0
+      //should it also be less than next expected frame? that would mess up on wrapping around to 0
       //or if this is a duplicate packet
       if ((packetnum > last_acceptable_frame) || receivedbuf[packetnum % expected_packets_this_window]) {
         //drop it
@@ -153,8 +155,6 @@ int main(int argc, char *argv[])
 
       else{
         //transfer contents into the permanent buf for this packet
-        //TODO: always transferring 1472 - headersize bytes won't work for the last packet. You can transfer numbytes, but if the last packet comes out of order, this could get lost in sorting
-        //segfaulting here.Try making a 1D array indexed by multiples of 1472 instead
         memcpy(storagebuf[packetnum % expected_packets_this_window], tempbuf+headersize, numbytes - headersize);
         //mark this packet number as present
         receivedbuf[packetnum % expected_packets_this_window] = 1;
@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
       //if all packets are present, write them in order to the file
       if (allpresent){
         for (i = 0; i < expected_packets_this_window; i++){
-          //TODO: how to account for last one being shorter than maxbuflen?
+          //account for last one being shorter than maxbuflen
           if(lastbufsmaller[i])
              fwrite(storagebuf[i], 1, lastbufsmaller[i], file);
           else
@@ -192,9 +192,9 @@ int main(int argc, char *argv[])
              exit(1);
          }
         
-         //slide the window only if we're not done
+         //slide the window only if we're not completely done
          if(!done){
-		 next_expected_frame++;
+		 next_expected_frame+=RWS;
 		 if(next_expected_frame >= NUMSEQNUMS)
 		    next_expected_frame = 0;
 	
@@ -204,6 +204,7 @@ int main(int argc, char *argv[])
 		     receivedbuf[i] = 0;
 		    }
           }
+          //if finished
           else {
             char ackbuf[2];
         ackbuf[0] = (char)(((next_expected_frame + expected_packets_this_window - 1) & 0xFF00) >> 8);
@@ -220,13 +221,13 @@ int main(int argc, char *argv[])
             break;
           }
       }
-
+      /* //ignore timeout acks for now
       //else if any packet has timed out that has NOT been received, send ack for last packet received
         else{
           //take timeout to be 2*RTT after most recent packet was received? or where should it start?
           struct timeval now;
           gettimeofday(&now, NULL);
-          if (((now.tv_sec - lastheard.tv_sec) >= timeout.tv_sec) && ((now.tv_usec - lastheard.tv_usec) > timeout.tv_usec)){
+          if (((now.tv_sec - lastheardtime.tv_sec) >= timeout.tv_sec) && ((now.tv_usec - lastheardtime.tv_usec) > timeout.tv_usec)){
             //send the latest thing you've heard
             //loop through received_buf until you find the first 0. Send the packet right before that
             uint16_t lastheard = -1;
@@ -253,7 +254,7 @@ int main(int argc, char *argv[])
 
           }
 
-        }
+        }*/
 
   }
 
